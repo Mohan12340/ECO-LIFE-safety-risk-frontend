@@ -1,0 +1,91 @@
+
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>ECO LIFE</title>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>ECO LIFE</h1>
+
+        <h2>Consent & AI Safety System</h2>
+
+
+        <label>User ID</label>
+
+        <input
+            type="text"
+            id="userId"
+            value="USER001"
+        >
+
+
+        <label>Select Persona</label>
+
+        <select id="persona">
+
+            <option value="parent">
+                Parent
+            </option>
+
+            <option value="friend">
+                Friend
+            </option>
+
+            <option value="mentor">
+                Mentor
+            </option>
+
+        </select>
+
+
+        <label>Select Emotional Mode</label>
+
+        <select id="mode">
+
+            <option value="blessing">
+                Blessing
+            </option>
+
+            <option value="story">
+                Story
+            </option>
+
+            <option value="advice">
+                Advice
+            </option>
+
+        </select>
+
+
+        <label>Your Message</label>
+
+        <textarea
+            id="message"
+            placeholder="Enter your message..."
+        ></textarea>
+
+
+        <button onclick="sendMessage()">
+            Process Request
+        </button>
+
+
+        <div id="result"></div>
+
+    </div>
+
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>
