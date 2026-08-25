@@ -38,4 +38,3 @@ jobs:
           # Push both tags to AWS
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-```
