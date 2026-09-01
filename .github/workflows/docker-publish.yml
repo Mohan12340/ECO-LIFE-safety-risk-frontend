@@ -1,22 +1,22 @@
 name: Build and Push Frontend to AWS ECR
- 
+
 on:
   push:
     branches:
       - main
- 
+
 jobs:
   build-and-push:
     name: Build & Push Frontend Image
     runs-on: ubuntu-latest
     environment: Devops
- 
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
- 
+
       # -----------------------------------------------------------
       # 1. SECURITY: Gitleaks Secret Scanning
       # -----------------------------------------------------------
@@ -24,9 +24,21 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
- 
+
       # -----------------------------------------------------------
-      # 2. DEPLOY: Build and Push to AWS ECR
+      # 2. SECURITY: Trivy Source Code & Dependency Scan (FS)
+      # -----------------------------------------------------------
+      - name: Run Trivy FS Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0' # Set to '1' if you want CRITICAL/HIGH code issues to break the build
+
+      # -----------------------------------------------------------
+      # 3. DEPLOY: Build Docker Image Locally
       # -----------------------------------------------------------
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -34,23 +46,48 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
- 
+
       - name: Log in to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
- 
-      - name: Build and Push Docker Image
+
+      - name: Build Docker Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.run_number }}
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+
+      # -----------------------------------------------------------
+      # 4. SECURITY: Trivy Docker Image Scan (Before Push)
+      # -----------------------------------------------------------
+      - name: Run Trivy Image Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.run_number }}
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:${{ github.run_number }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0' # Set to '1' to block pushing to ECR if vulnerabilities exist
+
+      # -----------------------------------------------------------
+      # 5. DEPLOY: Push Verified Image to AWS ECR
+      # -----------------------------------------------------------
+      - name: Push Docker Image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.run_number }}
+        run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
- 
+
       # -----------------------------------------------------------
-      # 3. NOTIFICATIONS: Slack Alert on Success
+      # 6. NOTIFICATIONS: Slack Alert on Success
       # -----------------------------------------------------------
       - name: Notify Slack on Success
         if: success()
@@ -59,10 +96,10 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_COLOR: '#00ff00'
           SLACK_TITLE: '✅ CI Pipeline Succeeded: Frontend'
-          SLACK_MESSAGE: 'Image build #${{ github.run_number }} built and pushed to AWS ECR successfully.'
- 
+          SLACK_MESSAGE: 'Image build #${{ github.run_number }} scanned with Trivy, built, and pushed to AWS ECR successfully.'
+
       # -----------------------------------------------------------
-      # 4. NOTIFICATIONS: Slack Alert on Failure
+      # 7. NOTIFICATIONS: Slack Alert on Failure
       # -----------------------------------------------------------
       - name: Notify Slack on Failure
         if: failure()
@@ -71,4 +108,4 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_COLOR: '#ff0000'
           SLACK_TITLE: '🚨 CI Pipeline Failed: Frontend'
-          SLACK_MESSAGE: 'Frontend pipeline failed during Gitleaks or Docker build/push. Check GitHub Actions logs.'
+          SLACK_MESSAGE: 'Frontend pipeline failed during Gitleaks, Trivy scanning, or Docker build/push. Check GitHub Actions logs.'
